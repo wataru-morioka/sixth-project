@@ -6,7 +6,7 @@ import * as moment from 'moment';
 admin.initializeApp(functions.config().firebase);
 const db = admin.firestore();
 
-exports.createQuestion = functions.region('asia-northeast1').firestore
+exports.extractTargets = functions.region('asia-northeast1').firestore
   .document('questions/{questionId}')
   .onCreate(async (snap, context) => {
     const question = snap.data();
@@ -104,7 +104,7 @@ function addTargets(uid: string, questionId: string, timePeriod: number) {
   const timeLimit = moment().add(9, 'hour').add(timePeriod, "minute").format("YYYY-MM-DD HH:mm:ss");
   db.collection('targets').add({
     "uid": uid,
-    "serverQuestioinId": questionId,
+    "serverQuestionId": questionId,
     "timeLimit": timeLimit,
     "askPushFlag": false,
     "askReceiveFlag": false,
