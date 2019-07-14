@@ -14,6 +14,8 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
     if (question === undefined) {
       return;
     }
+
+    console.log('新規質問受信：' + question.id);
     
     const users = db.collection('users');
     let count: number = 0;
@@ -221,7 +223,7 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
         });
       })
     );
-    if (result) {
+    if (!result) {
       break;
     }
 
@@ -311,6 +313,7 @@ exports.deleteTargets = functions.region('asia-northeast1').firestore
     }
 
     if (target['resultReceiveFlag']) {
+      console.log('削除target:'+ context.params.targetId);
       await db.collection('targets').doc(context.params.targetId).delete();
     }
     
@@ -326,6 +329,7 @@ exports.deleteAnswers = functions.region('asia-northeast1').firestore
     }
 
     if (answer['determinationFlag']) {
+      console.log('削除target:'+ context.params.answerId);  
       await db.collection('answers').doc(context.params.answerId).delete();
     }
     
