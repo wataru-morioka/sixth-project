@@ -3,6 +3,9 @@ import * as admin from 'firebase-admin';
 import * as moment from 'moment';
 admin.initializeApp(functions.config().firebase);
 const db = admin.firestore();
+const options = {
+  priority: "high",
+};
 
 exports.extractTargets = functions.region('asia-northeast1').firestore
   .document('questions/{questionId}')
@@ -107,7 +110,7 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
     const targetQuestionIdArray: string[] = new Array();
     const questions = db.collection('questions');
     await questions.where('determinationFlag', '==', false)
-                  .where('timeLimit', '>', now)
+                  .where('timeLimit', '<', now)
                   .get()
                   .then(async targetQuestions => {
                     Promise.all(
@@ -228,15 +231,23 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
 
 exports.pushAskingToTargets = functions.region('asia-northeast1').firestore
   .document('targets/{targetId}')
-  .onCreate( async (snap, context) => {
+  .onCreate(async (snap, context) => {
     const target = snap.data();
     if (target === undefined) {
       return;
     }
 
     //プッシュ通知
+    const payload = {
+      notification: {
+        title: '新着質問',
+        body: '新しい質問を受信しました',
+        badge: "1",
+        sound:"default",
+      }
+    };
 
-
+    await notify(payload, target['uid']);
     
     return 0;
 });
@@ -251,8 +262,16 @@ exports.pushResultTargets = functions.region('asia-northeast1').firestore
 
     if (target['determinationFlag'] && !target['resultReceiveFlag']) {
       //プッシュ通知
-
-
+      const payload = {
+        notification: {
+          title: '集計結果受信',
+          body: '他人の質問の集計が完了しました',
+          badge: "1",
+          sound:"default",
+        }
+      };
+  
+      await notify(payload, target['uid']);
     }
     
     return 0;
@@ -268,8 +287,16 @@ exports.pushResultToOwners = functions.region('asia-northeast1').firestore
 
     if (question['determinationFlag'] && !question['resultReceiveFlag']) {
       //プッシュ通知
-
-
+      const payload = {
+        notification: {
+          title: '集計結果受信',
+          body: '他人の質問の集計が完了しました',
+          badge: "1",
+          sound:"default",
+        }
+      };
+  
+      await notify(payload, question['uid']);
     }
     
     return 0;
@@ -347,5 +374,33 @@ function addTargets(uid: string, questionId: string, timePeriod: number) {
   })
   .catch(err => {
     console.log('Error getting documents', err);
+  });
+}
+
+async function notify(payload: {}, uid: string) {
+  let token: string = ''
+  let result = false;
+  await db.collection('users').doc(uid).get().then(user => {
+    const userInfo = user.data()
+    if (userInfo === undefined) {
+      return;
+    }
+    token = userInfo.token;
+    if (token.length > 0) {
+      console.log(token);
+      result = true;
+    }
+  })
+
+  if (!result) {
+    return;
+  }
+
+  admin.messaging().sendToDevice(token, payload, options)
+  .then(pushResponse => {
+    console.log("Successfully sent message:", pushResponse);
+  })
+  .catch(error => {
+    console.log("Error sending message:", error);
   });
 }
