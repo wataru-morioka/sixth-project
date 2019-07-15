@@ -12,7 +12,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
   .onCreate(async (snap, context) => {
     const question = snap.data();
     if (question === undefined) {
-      return;
+      return 1;
     }
 
     console.log('新規質問受信：' + question.id);
@@ -45,16 +45,16 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
       await users.where(admin.firestore.FieldPath.documentId(), '>=', key)
           .limit(1)
           .get()
-          .then(async targets => {
-              if(targets.size > 0) {
+          .then(async userDocs => {
+              if(userDocs.size > 0) {
                 exist = true;
-                Promise.all(targets.docs.map(target => {
-                    if (targetArray.indexOf(target.id) >= 0) {
+                Promise.all(userDocs.docs.map(user => {
+                    if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) {
                       return;
                     }
-                    console.log(target.id, '=>', target.data());
-                    targetArray.push(target.id);
-                    addTargets(target.id, context.params.questionId, question.timePeriod);
+                    console.log(user.id, '=>', user.data());
+                    targetArray.push(user.id);
+                    addTargets(user.id, context.params.questionId, question.timePeriod);
                   })
                 ).then( _ => {
                     console.log('登録完了');
@@ -76,14 +76,14 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
       await users.where(admin.firestore.FieldPath.documentId(), '<=', key)
           .limit(1)
           .get()
-          .then(async targets => {
-            Promise.all(targets.docs.map(target => {
-                if (targetArray.indexOf(target.id) >= 0) {
+          .then(async userDocs => {
+            Promise.all(userDocs.docs.map(user => {
+                if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) {
                   return;
                 }
-                console.log(target.id, '=>', target.data());
-                targetArray.push(target.id);
-                addTargets(target.id, context.params.questionId, question.timePeriod);
+                console.log(user.id, '=>', user.data());
+                targetArray.push(user.id);
+                addTargets(user.id, context.params.questionId, question.timePeriod);
               })
             ).then( _ => {
                 console.log('登録完了');
@@ -236,7 +236,7 @@ exports.pushAskingToTargets = functions.region('asia-northeast1').firestore
   .onCreate(async (snap, context) => {
     const target = snap.data();
     if (target === undefined) {
-      return;
+      return 1;
     }
 
     //プッシュ通知
@@ -250,6 +250,10 @@ exports.pushAskingToTargets = functions.region('asia-northeast1').firestore
     };
 
     await notify(payload, target['uid']);
+
+    await db.collection('targets').doc(context.params.targetId).update({
+      'askPushFlag': true
+    });
     
     return 0;
 });
@@ -259,22 +263,29 @@ exports.pushResultTargets = functions.region('asia-northeast1').firestore
   .onUpdate( async (snap, context) => {
     const target = snap.after.data();
     if (target === undefined) {
-      return;
+      return 1;
     }
 
-    if (target['determinationFlag'] && !target['resultReceiveFlag']) {
-      //プッシュ通知
-      const payload = {
-        notification: {
-          title: '集計結果受信',
-          body: '他人の質問の集計が完了しました',
-          badge: "1",
-          sound:"default",
-        }
-      };
-  
-      await notify(payload, target['uid']);
+    if (!target['determinationFlag'] || target['resultReceiveFlag']) {
+      return 0;
     }
+
+    //プッシュ通知
+    const payload = {
+      notification: {
+        title: '集計結果受信',
+        body: '他人の質問の集計が完了しました',
+        badge: "1",
+        sound:"default",
+      },
+      
+    };
+
+    await notify(payload, target['uid']);
+
+    await db.collection('targets').doc(context.params.targetId).update({
+      'finalPushFlag': true
+    });
     
     return 0;
 });
@@ -284,22 +295,28 @@ exports.pushResultToOwners = functions.region('asia-northeast1').firestore
   .onUpdate( async (snap, context) => {
     const question = snap.after.data();
     if (question === undefined) {
-      return;
+      return 1;
     }
 
-    if (question['determinationFlag'] && !question['resultReceiveFlag']) {
-      //プッシュ通知
-      const payload = {
-        notification: {
-          title: '集計結果受信',
-          body: '他人の質問の集計が完了しました',
-          badge: "1",
-          sound:"default",
-        }
-      };
-  
-      await notify(payload, question['uid']);
+    if (!question['determinationFlag'] || question['resultReceiveFlag']) {
+      return 0;
     }
+
+    //プッシュ通知
+    const payload = {
+      notification: {
+        title: '集計結果受信',
+        body: '他人の質問の集計が完了しました',
+        badge: "1",
+        sound:"default",
+      }
+    };
+
+    await notify(payload, question['uid']);
+
+    await db.collection('questions').doc(context.params.questionId).update({
+      'finalPushFlag': true
+    });
     
     return 0;
 });
@@ -309,7 +326,7 @@ exports.deleteTargets = functions.region('asia-northeast1').firestore
   .onUpdate( async (snap, context) => {
     const target = snap.after.data();
     if (target === undefined) {
-      return;
+      return 1;
     }
 
     if (target['resultReceiveFlag']) {
@@ -325,7 +342,7 @@ exports.deleteAnswers = functions.region('asia-northeast1').firestore
   .onUpdate( async (snap, context) => {
     const answer = snap.after.data();
     if (answer === undefined) {
-      return;
+      return 1;
     }
 
     if (answer['determinationFlag']) {
