@@ -266,7 +266,7 @@ exports.pushResultTargets = functions.region('asia-northeast1').firestore
       return 1;
     }
 
-    if (!target['determinationFlag'] || target['resultReceiveFlag']) {
+    if (!target['determinationFlag'] || target['resultReceiveFlag'] || target['finalPushFlag']) {
       return 0;
     }
 
@@ -298,7 +298,7 @@ exports.pushResultToOwners = functions.region('asia-northeast1').firestore
       return 1;
     }
 
-    if (!question['determinationFlag'] || question['resultReceiveFlag']) {
+    if (!question['determinationFlag'] || question['resultReceiveFlag'] || question['finalPushFlag']) {
       return 0;
     }
 
@@ -306,7 +306,7 @@ exports.pushResultToOwners = functions.region('asia-northeast1').firestore
     const payload = {
       notification: {
         title: '集計結果受信',
-        body: '他人の質問の集計が完了しました',
+        body: '自分の質問の集計が完了しました',
         badge: "1",
         sound:"default",
       }
@@ -329,7 +329,7 @@ exports.deleteTargets = functions.region('asia-northeast1').firestore
       return 1;
     }
 
-    if (target['resultReceiveFlag']) {
+    if (target['resultReceiveFlag'] && target['finalPushFlag']) {
       console.log('削除target:'+ context.params.targetId);
       await db.collection('targets').doc(context.params.targetId).delete();
     }
