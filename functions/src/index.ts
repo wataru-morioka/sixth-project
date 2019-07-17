@@ -20,8 +20,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
     let count: number = 0;
     let targetNumber: number = 0;
 
-    await users.get()
-      .then(allUsers => {
+    await users.get().then(allUsers => {
         count = allUsers.size;
       })
       .catch(err => {
@@ -45,33 +44,26 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
       .limit(1)
       .get()
       .then(userDocs => {
-        if(userDocs.size <= 0) {
-          return;
-        }
+        if(userDocs.size <= 0) { return; }
         exist = true;
         Promise.all(userDocs.docs.map(user => {
-          if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) {
-            return;
-          }
+          if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) { return; }
           console.log(user.id, '=>', user.data());
           targetArray.push(user.id);
           addTargets(user.id, context.params.questionId, question.minutes);
         })
         ).then( _ => {
-            console.log('登録完了');
+          console.log('登録完了');
         })
         .catch(err => {
-            console.log('登録エラー', err);
-          }
-        );
+          console.log('登録エラー', err);
+        });
       })
       .catch(err => {
-          console.log('Error getting documents', err);
+        console.log('Error getting documents', err);
       });
       
-      if (exist) {
-        continue;
-      }
+      if (exist) { continue; }
 
       await users
       .where(admin.firestore.FieldPath.documentId(), '<=', key)
@@ -79,26 +71,22 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
       .get()
       .then(userDocs => {
         Promise.all(userDocs.docs.map(user => {
-          if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) {
-            return;
-          }
+          if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) { return; }
           console.log(user.id, '=>', user.data());
           targetArray.push(user.id);
           addTargets(user.id, context.params.questionId, question.minutes);
         })
         ).then( _ => {
-            console.log('登録完了');
-          })
+          console.log('登録完了');
+        })
         .catch(err => {
-            console.log('登録エラー');
-          }
-        );
+          console.log('登録エラー');
+        });
       })
       .catch(err => {
-          console.log('Error getting documents', err);
+        console.log('Error getting documents', err);
       });
     }
-    
     return 0;
 });
 
