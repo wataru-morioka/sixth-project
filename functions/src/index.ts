@@ -98,34 +98,15 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
   // while (loopFlag) {
     console.log('ループ');
     let result = true;
+
     //集計対象の質問を抽出
-    const now = moment().add(9, 'hour').format('YYYY-MM-DD HH:mm:ss');
-    const targetQuestionIdArray: string[] = new Array();
-    const questions = db.collection('questions');
-    await questions
-    .where('determinationFlag', '==', false)
-    .where('timeLimit', '<', now)
-    .get()
-    .then(async targetQuestions => {
-      Promise.all(
-        targetQuestions.docs.map(targetQuestion => {
-          console.log('抽出対象：' + targetQuestion.id);
-          targetQuestionIdArray.push(targetQuestion.id);
-        })
-      ).then( _ => {
-          console.log('集計対象抽出成功');
-        }
-      ).catch(err => {
-          console.log('集計対象抽出エラー');
-          result = false;
-        }
-      );
-    })
-    .catch(err => {
-      console.log('Error getting documents', err);
-      result = false;
-    });
-    console.log('抽出完了');
+    let targetQuestionIdArray: string[] = new Array();
+    await extractQuestion()
+    .then(questions => {
+      targetQuestionIdArray = questions;
+    }).catch(err => {
+      console.log(err);
+    }); 
 
     //非同期で各質問の集計をし、（questions,targets,answers）コレクションを更新※トランザクション
     Promise.all(
@@ -185,6 +166,38 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
   //   await sleep(60);
   // }
 });
+
+const extractQuestion = () => {
+  return new Promise<string[]>(async (resolve, reject) => {
+    const now = moment().add(9, 'hour').format('YYYY-MM-DD HH:mm:ss');
+    const targetQuestionIdArray: string[] = new Array();
+
+    await db.collection('questions')
+    .where('determinationFlag', '==', false)
+    .where('timeLimit', '<', now)
+    .get()
+    .then(targetQuestions => {
+      Promise.all(
+        targetQuestions.docs.map(async targetQuestion => {
+          console.log('抽出対象：' + targetQuestion.id);
+          targetQuestionIdArray.push(targetQuestion.id);
+        })
+      ).then( _ => {
+          console.log('集計対象抽出成功');
+          resolve(targetQuestionIdArray);
+        }
+      ).catch(err => {
+          console.log('集計対象抽出エラー');
+          reject({});
+        }
+      );
+    })
+    .catch(err => {
+      console.log('Error getting documents', err);
+      reject({});
+    });
+  })
+}
 
 const aggregate = (questionId: string, decision: number) => {
   return new Promise<number>(async (resolve, reject) => {
