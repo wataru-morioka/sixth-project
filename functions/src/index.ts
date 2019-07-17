@@ -15,9 +15,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
     if (question === undefined) {
       return 1;
     }
-
     console.log('新規質問受信：' + question.id);
-    
     const users = db.collection('users');
     let count: number = 0;
     let targetNumber: number = 0;
@@ -39,64 +37,66 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
     const targetArray: string[] = new Array();
 
     while (targetArray.length < targetNumber) {
-      console.log(targetArray.length)
       const key = users.doc().id;
       let exist = false;
 
-      await users.where(admin.firestore.FieldPath.documentId(), '>=', key)
-          .limit(1)
-          .get()
-          .then(userDocs => {
-              if(userDocs.size > 0) {
-                exist = true;
-                Promise.all(userDocs.docs.map(user => {
-                    if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) {
-                      return;
-                    }
-                    console.log(user.id, '=>', user.data());
-                    targetArray.push(user.id);
-                    addTargets(user.id, context.params.questionId, question.minutes);
-                  })
-                ).then( _ => {
-                    console.log('登録完了');
-                  }
-                ).catch(err => {
-                    console.log('登録エラー');
-                  }
-                );
-              }
-          })
-          .catch(err => {
-              console.log('Error getting documents', err);
-          });
+      await users
+      .where(admin.firestore.FieldPath.documentId(), '>=', key)
+      .limit(1)
+      .get()
+      .then(userDocs => {
+        if(userDocs.size <= 0) {
+          return;
+        }
+        exist = true;
+        Promise.all(userDocs.docs.map(user => {
+          if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) {
+            return;
+          }
+          console.log(user.id, '=>', user.data());
+          targetArray.push(user.id);
+          addTargets(user.id, context.params.questionId, question.minutes);
+        })
+        ).then( _ => {
+            console.log('登録完了');
+        })
+        .catch(err => {
+            console.log('登録エラー', err);
+          }
+        );
+      })
+      .catch(err => {
+          console.log('Error getting documents', err);
+      });
       
       if (exist) {
         continue;
       }
 
-      await users.where(admin.firestore.FieldPath.documentId(), '<=', key)
-          .limit(1)
-          .get()
-          .then(userDocs => {
-            Promise.all(userDocs.docs.map(user => {
-                if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) {
-                  return;
-                }
-                console.log(user.id, '=>', user.data());
-                targetArray.push(user.id);
-                addTargets(user.id, context.params.questionId, question.minutes);
-              })
-            ).then( _ => {
-                console.log('登録完了');
-              }
-            ).catch(err => {
-                console.log('登録エラー');
-              }
-            );
+      await users
+      .where(admin.firestore.FieldPath.documentId(), '<=', key)
+      .limit(1)
+      .get()
+      .then(userDocs => {
+        Promise.all(userDocs.docs.map(user => {
+          if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) {
+            return;
+          }
+          console.log(user.id, '=>', user.data());
+          targetArray.push(user.id);
+          addTargets(user.id, context.params.questionId, question.minutes);
+        })
+        ).then( _ => {
+            console.log('登録完了');
           })
-          .catch(err => {
-              console.log('Error getting documents', err);
-          });
+        .catch(err => {
+            console.log('登録エラー');
+          }
+        );
+      })
+      .catch(err => {
+          console.log('Error getting documents', err);
+      });
     }
     
     return 0;
@@ -114,28 +114,29 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
     const now = moment().add(9, 'hour').format('YYYY-MM-DD HH:mm:ss');
     const targetQuestionIdArray: string[] = new Array();
     const questions = db.collection('questions');
-    await questions.where('determinationFlag', '==', false)
-                  .where('timeLimit', '<', now)
-                  .get()
-                  .then(async targetQuestions => {
-                    Promise.all(
-                      targetQuestions.docs.map(targetQuestion => {
-                        console.log('抽出対象：' + targetQuestion.id);
-                        targetQuestionIdArray.push(targetQuestion.id);
-                      })
-                    ).then( _ => {
-                        console.log('集計対象抽出成功');
-                      }
-                    ).catch(err => {
-                        console.log('集計対象抽出エラー');
-                        result = false;
-                      }
-                    );
-                  })
-                  .catch(err => {
-                    console.log('Error getting documents', err);
-                    result = false;
-                  });
+    await questions
+    .where('determinationFlag', '==', false)
+    .where('timeLimit', '<', now)
+    .get()
+    .then(async targetQuestions => {
+      Promise.all(
+        targetQuestions.docs.map(targetQuestion => {
+          console.log('抽出対象：' + targetQuestion.id);
+          targetQuestionIdArray.push(targetQuestion.id);
+        })
+      ).then( _ => {
+          console.log('集計対象抽出成功');
+        }
+      ).catch(err => {
+          console.log('集計対象抽出エラー');
+          result = false;
+        }
+      );
+    })
+    .catch(err => {
+      console.log('Error getting documents', err);
+      result = false;
+    });
     console.log('抽出完了');
 
     //非同期で各質問の集計をし、（questions,targets,answers）コレクションを更新※トランザクション
@@ -340,7 +341,6 @@ exports.pushResultTargets = functions.region('asia-northeast1').firestore
         badge: "1",
         sound:"default",
       },
-      
     };
 
     await notify(payload, target['uid']);
@@ -415,13 +415,13 @@ exports.deleteAnswers = functions.region('asia-northeast1').firestore
     return 0;
 });
 
-const sleep = (waitSeconds: number) => {
-  return new Promise(resolve => {
-      setTimeout(() => {
-        resolve();
-    }, waitSeconds * 1000);
-  })
-}
+// const sleep = (waitSeconds: number) => {
+//   return new Promise(resolve => {
+//       setTimeout(() => {
+//         resolve();
+//     }, waitSeconds * 1000);
+//   })
+// }
 
 function addTargets(uid: string, questionId: string, minutes: number) {
   const now = moment().add(9, 'hour').format('YYYY-MM-DD HH:mm:ss');
