@@ -308,7 +308,7 @@ exports.pushAskingToTargets = functions.region('asia-northeast1').firestore
       notification: {
         title: '新着質問',
         body: '新しい質問を受信しました',
-        badge: "1",
+        // badge: "1",
         sound:"default",
       }
     };
@@ -339,7 +339,7 @@ exports.pushResultTargets = functions.region('asia-northeast1').firestore
       notification: {
         title: '集計結果受信',
         body: '他人の質問の集計が完了しました',
-        badge: "1",
+        // badge: "1",
         sound:"default",
       },
     };
@@ -370,7 +370,7 @@ exports.pushResultToOwners = functions.region('asia-northeast1').firestore
       notification: {
         title: '集計結果受信',
         body: '自分の質問の集計が完了しました',
-        badge: "1",
+        // badge: "1",
         sound:"default",
       }
     };
