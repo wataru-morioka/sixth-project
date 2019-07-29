@@ -106,7 +106,8 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
       targetQuestionIdArray = questions;
     }).catch(err => {
       console.log(err);
-    }); 
+      result = false;
+    });
 
     //非同期で各質問の集計をし、（questions,targets,answers）コレクションを更新※トランザクション
     Promise.all(
@@ -132,7 +133,7 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
         await Promise.all([
           updateTargets(batch, questionId),
           updateAnswers(batch, questionId),
-          updateQuestion(batch, questionId,answer1number,answer2number)
+          updateQuestion(batch, questionId, answer1number, answer2number)
         ])
         .then(async results => {
           console.log('コミット開始', results);
@@ -232,7 +233,7 @@ const updateTargets = (batch: WriteBatch, questionId: string) => {
             'determinationFlag': true 
           });
         })
-      ).then( async _ => {
+      ).then(_ => {
           console.log('targets更新完了');
           resolve(true);
         }
@@ -265,7 +266,7 @@ const updateAnswers = (batch: WriteBatch, questionId: string) => {
             'determinationFlag': true
           });
         })
-      ).then( test => {
+      ).then(_ => {
           console.log('answers更新完了');
           resolve(true);
         }
