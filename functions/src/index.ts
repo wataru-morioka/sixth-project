@@ -46,11 +46,11 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
       .then(userDocs => {
         if(userDocs.size <= 0) { return; }
         exist = true;
-        Promise.all(userDocs.docs.map(user => {
+        Promise.all(userDocs.docs.map(async user => {
           if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) { return; }
           console.log(user.id, '=>', user.data());
           targetArray.push(user.id);
-          addTargets(user.id, context.params.questionId, question.minutes);
+          await addTargets(user.id, context.params.questionId, question.minutes);
         })
         ).then( _ => {
           console.log('登録完了');
@@ -70,11 +70,11 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
       .limit(1)
       .get()
       .then(userDocs => {
-        Promise.all(userDocs.docs.map(user => {
+        Promise.all(userDocs.docs.map(async user => {
           if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) { return; }
           console.log(user.id, '=>', user.data());
           targetArray.push(user.id);
-          addTargets(user.id, context.params.questionId, question.minutes);
+          await addTargets(user.id, context.params.questionId, question.minutes);
         })
         ).then( _ => {
           console.log('登録完了');
@@ -130,13 +130,15 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
 
         console.log('トランザクション開始');
         const batch = db.batch();
+        // const batch2 = db.batch();
+        // const batch3 = db.batch();
         await Promise.all([
           updateTargets(batch, questionId),
           updateAnswers(batch, questionId),
           updateQuestion(batch, questionId, answer1number, answer2number)
         ])
-        .then(async results => {
-          console.log('コミット開始', results);
+        .then(async _ => {
+          console.log('コミット開始');
           await batch.commit()
           .then(function () {
             console.log("トランザクション完了");
@@ -144,7 +146,18 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
           .catch(err => {
             console.log('コミットエラー', err);
             result = false;
-          }); 
+          });
+          // await Promise.all([
+          //   batch.commit(),
+          //   // batch2.commit(),
+          //   // batch3.commit()
+          //   ]
+          // ).then(() => {
+          //   console.log("トランザクション完了");
+          // }).catch(err => {
+          //   console.log('コミットエラー', err);
+          //   result = false;
+          // });
         })
         .catch(err => {
           console.log('集計処理エラー', err);
@@ -182,6 +195,7 @@ const extractQuestion = () => {
         targetQuestions.docs.map(async targetQuestion => {
           console.log('抽出対象：' + targetQuestion.id);
           targetQuestionIdArray.push(targetQuestion.id);
+          return;
         })
       ).then( _ => {
           console.log('集計対象抽出成功');
@@ -209,82 +223,82 @@ const aggregate = (questionId: string, decision: number) => {
     .then(results => {
       console.log(decision + ' questionId:' + questionId + ' ' + results.size);
       resolve(results.size);
-      return;
     })
     .catch(err => {
       reject(-1);
-      return;
     });
   }); 
 }
 
 const updateTargets = (batch: WriteBatch, questionId: string) => {
-  return new Promise<boolean>(async (resolve, reject) => {
+  return new Promise<void>(async (resolve, reject) => {
     console.log('targets更新開始');
     await db.collection('targets')
     .where('serverQuestionId', '==', questionId)
     .get()
-    .then(targets => {
-      Promise.all(
+    .then(async targets => {
+      await Promise.all(
         targets.docs.map(async target => {
           console.log(target.id);
           const targetRef = db.collection('targets').doc(target.id); 
           batch.update(targetRef, {
             'determinationFlag': true 
           });
+          return;
         })
       ).then(_ => {
           console.log('targets更新完了');
-          resolve(true);
+          resolve();
         }
       )
       .catch(err => {
           console.log('targets更新エラー');
-          reject(false);
+          reject();
         }
       );
     })
     .catch(err => {
       console.log('Error2 getting documents', err);
-      reject(false);
+      reject();
     });
   })
 }
 
 const updateAnswers = (batch: WriteBatch, questionId: string) => {
-  return new Promise<boolean>(async (resolve, reject) => {
+  return new Promise<void>(async (resolve, reject) => {
     console.log('answers更新開始');
     await db.collection('answers')
     .where('serverQuestionId', '==', questionId)
     .get()
-    .then(answers =>{
-      Promise.all(
+    .then(async answers =>{
+      await Promise.all(
         answers.docs.map(async answer => {
           console.log(answer.id);
           const answerRef = db.collection('answers').doc(answer.id);
           batch.update(answerRef, {
             'determinationFlag': true
           });
+          return;
         })
       ).then(_ => {
           console.log('answers更新完了');
-          resolve(true);
+          resolve();
         }
       ).catch(err => {
           console.log('answers更新エラー');
-          reject(false);
+          reject();
         }
       );
     })
     .catch(err => {
       console.log('Error3 getting documents', err);
-      reject(false);
+      reject();
     });
   })
 }
 
 const updateQuestion = (batch: WriteBatch, questionId: string, answer1number: number, answer2number: number) => {
-  return new Promise<boolean>((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     console.log('questions更新開始');
     const questionRef = db.collection('questions').doc(questionId);
     batch.update(questionRef, {
@@ -292,7 +306,7 @@ const updateQuestion = (batch: WriteBatch, questionId: string, answer1number: nu
       'answer2number': answer2number,
       'determinationFlag': true
     });
-    resolve(true);
+    resolve();
   })
 }
 
@@ -425,7 +439,7 @@ exports.deleteAnswers = functions.region('asia-northeast1').firestore
 //   })
 // }
 
-function addTargets(uid: string, questionId: string, minutes: number) {
+async function addTargets(uid: string, questionId: string, minutes: number) {
   const now = moment().add(9, 'hour').format('YYYY-MM-DD HH:mm:ss');
   const timeLimit = moment().add(9, 'hour').add(minutes, 'minute').format('YYYY-MM-DD HH:mm:ss');
 
@@ -453,7 +467,7 @@ function addTargets(uid: string, questionId: string, minutes: number) {
     'askFlag': true
   });
 
-  batch.commit()
+  await batch.commit()
   .then(function () {
     console.log("トランザクション完了");
   })
