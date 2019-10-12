@@ -8,6 +8,7 @@ const options = {
   priority: "high",
 };
 
+// 新規質問が登録された際、回答を問い合わせるターゲットのユーザを抽出し、DBに登録
 exports.extractTargets = functions.region('asia-northeast1').firestore
   .document('questions/{questionId}')
   .onCreate(async (snap, context) => {
@@ -20,6 +21,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
     let count: number = 0;
     let targetNumber: number = 0;
 
+    // ユーザ総数をカウント
     await users.get().then(allUsers => {
         count = allUsers.size;
       })
@@ -27,6 +29,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
           console.log('Error getting documents', err);
       });
 
+    // ユーザ総数とお問い合わせ対象人数を比較
     if (count < question.targetNumber) {
       targetNumber = count;
     } else {
@@ -35,10 +38,13 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
 
     const targetArray: string[] = new Array();
 
+    // 対象人数分、ランダムにユーザを抽出
     while (targetArray.length < targetNumber) {
+      // 乱数ドキュメントID取得
       const key = users.doc().id;
       let exist = false;
 
+      // 乱数より大きいドキュメントIDをもつユーザがいた場合、一人抽出
       await users
       .where(admin.firestore.FieldPath.documentId(), '>=', key)
       .limit(1)
@@ -50,6 +56,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
           if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) { return; }
           console.log(user.id, '=>', user.data());
           targetArray.push(user.id);
+          // targetコレクションに新規登録
           await addTargets(user.id, context.params.questionId, question.minutes);
         })
         ).then( _ => {
@@ -65,6 +72,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
       
       if (exist) { continue; }
 
+      // 乱数より小さいドキュメントIDをもつユーザがいた場合、一人抽出
       await users
       .where(admin.firestore.FieldPath.documentId(), '<=', key)
       .limit(1)
@@ -74,6 +82,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
           if (targetArray.indexOf(user.id) >= 0 || user.id === question.uid) { return; }
           console.log(user.id, '=>', user.data());
           targetArray.push(user.id);
+          // targetコレクションに新規登録
           await addTargets(user.id, context.params.questionId, question.minutes);
         })
         ).then( _ => {
@@ -90,6 +99,7 @@ exports.extractTargets = functions.region('asia-northeast1').firestore
     return 0;
 });
 
+// 時間制限を過ぎた質問を抽出し、それぞれ非同期に集計し、更新すべきドキュメントを非同期に更新
 exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (request, response) => {
   setTimeout( () => {
     response.send('集計処理バッチ開始');
@@ -115,7 +125,6 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
         //集計
         let answer1number = 0;
         let answer2number = 0;
-
         await Promise.all([
           aggregate(questionId, 1),
           aggregate(questionId, 2)
@@ -130,8 +139,6 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
 
         console.log('トランザクション開始');
         const batch = db.batch();
-        // const batch2 = db.batch();
-        // const batch3 = db.batch();
         await Promise.all([
           updateTargets(batch, questionId),
           updateAnswers(batch, questionId),
@@ -147,17 +154,6 @@ exports.aggregate = functions.region('asia-northeast1').https.onRequest( async (
             console.log('コミットエラー', err);
             result = false;
           });
-          // await Promise.all([
-          //   batch.commit(),
-          //   // batch2.commit(),
-          //   // batch3.commit()
-          //   ]
-          // ).then(() => {
-          //   console.log("トランザクション完了");
-          // }).catch(err => {
-          //   console.log('コミットエラー', err);
-          //   result = false;
-          // });
         })
         .catch(err => {
           console.log('集計処理エラー', err);
@@ -214,6 +210,7 @@ const extractQuestion = () => {
   })
 }
 
+// 回答を集計
 const aggregate = (questionId: string, decision: number) => {
   return new Promise<number>(async (resolve, reject) => {
     await db.collection('answers')
@@ -230,6 +227,7 @@ const aggregate = (questionId: string, decision: number) => {
   }); 
 }
 
+// 集計が完了したことを回答者ドキュメントに更新
 const updateTargets = (batch: WriteBatch, questionId: string) => {
   return new Promise<void>(async (resolve, reject) => {
     console.log('targets更新開始');
@@ -264,6 +262,7 @@ const updateTargets = (batch: WriteBatch, questionId: string) => {
   })
 }
 
+// 集計が完了したことをanswerドキュメントに更新
 const updateAnswers = (batch: WriteBatch, questionId: string) => {
   return new Promise<void>(async (resolve, reject) => {
     console.log('answers更新開始');
@@ -297,6 +296,7 @@ const updateAnswers = (batch: WriteBatch, questionId: string) => {
   })
 }
 
+// 集計結果をquestionドキュメントに更新
 const updateQuestion = (batch: WriteBatch, questionId: string, answer1number: number, answer2number: number) => {
   return new Promise<void>((resolve, reject) => {
     console.log('questions更新開始');
@@ -310,6 +310,7 @@ const updateQuestion = (batch: WriteBatch, questionId: string, answer1number: nu
   })
 }
 
+// 新規質問の回答者として抽出された対象回答者に対し、プッシュ通知
 exports.pushAskingToTargets = functions.region('asia-northeast1').firestore
   .document('targets/{targetId}')
   .onCreate(async (snap, context) => {
@@ -330,6 +331,7 @@ exports.pushAskingToTargets = functions.region('asia-northeast1').firestore
 
     await notify(payload, target['uid']);
 
+    // プッシュ通知が完了した情報をtargetドキュメントに更新
     await db.collection('targets').doc(context.params.targetId).update({
       'askPushFlag': true
     });
@@ -337,6 +339,7 @@ exports.pushAskingToTargets = functions.region('asia-northeast1').firestore
     return 0;
 });
 
+// 集計が完了した質問の回答者に対し、プッシュ通知
 exports.pushResultTargets = functions.region('asia-northeast1').firestore
   .document('targets/{targetId}')
   .onUpdate( async (snap, context) => {
@@ -361,6 +364,7 @@ exports.pushResultTargets = functions.region('asia-northeast1').firestore
 
     await notify(payload, target['uid']);
 
+    // プッシュ通知が完了した情報をtargetドキュメントに更新
     await db.collection('targets').doc(context.params.targetId).update({
       'finalPushFlag': true
     });
@@ -368,6 +372,7 @@ exports.pushResultTargets = functions.region('asia-northeast1').firestore
     return 0;
 });
 
+// 集計が完了した質問の質問者に対し、プッシュ通知
 exports.pushResultToOwners = functions.region('asia-northeast1').firestore
   .document('questions/{questionId}')
   .onUpdate( async (snap, context) => {
@@ -392,6 +397,7 @@ exports.pushResultToOwners = functions.region('asia-northeast1').firestore
 
     await notify(payload, question['uid']);
 
+    // プッシュ通知が完了した情報を質問ドキュメントに更新
     await db.collection('questions').doc(context.params.questionId).update({
       'finalPushFlag': true
     });
@@ -399,6 +405,7 @@ exports.pushResultToOwners = functions.region('asia-northeast1').firestore
     return 0;
 });
 
+// 集計結果を受信したtarget（質問に対し回答をしたユーザ）ドキュメントを削除
 exports.deleteTargets = functions.region('asia-northeast1').firestore
   .document('targets/{targetId}')
   .onUpdate( async (snap, context) => {
@@ -415,6 +422,7 @@ exports.deleteTargets = functions.region('asia-northeast1').firestore
     return 0;
 });
 
+// 回答の集計が完了した質問に対する回答ドキュメントを削除
 exports.deleteAnswers = functions.region('asia-northeast1').firestore
   .document('answers/{answerId}')
   .onUpdate( async (snap, context) => {
@@ -439,6 +447,7 @@ exports.deleteAnswers = functions.region('asia-northeast1').firestore
 //   })
 // }
 
+// お問い合わせ対象のユーザドキュメントをtargetコレクションに新規登録
 async function addTargets(uid: string, questionId: string, minutes: number) {
   const now = moment().add(9, 'hour').format('YYYY-MM-DD HH:mm:ss');
   const timeLimit = moment().add(9, 'hour').add(minutes, 'minute').format('YYYY-MM-DD HH:mm:ss');
@@ -448,6 +457,7 @@ async function addTargets(uid: string, questionId: string, minutes: number) {
   
   const batch = db.batch();
 
+  // targetコレクションに新規登録
   batch.set(targetRef, {
     'uid': uid,
     'serverQuestionId': questionId,
@@ -462,6 +472,7 @@ async function addTargets(uid: string, questionId: string, minutes: number) {
     'modifiedDateTime': null,
   });
 
+  // questionコレクションを更新
   batch.update(questionRef, {
     'timeLimit': timeLimit,
     'askFlag': true
@@ -476,9 +487,12 @@ async function addTargets(uid: string, questionId: string, minutes: number) {
   });
 }
 
+// 対象ユーザにプッシュ通知を送信
 async function notify(payload: {}, uid: string) {
   let token: string = ''
   let result = false;
+
+  // ユーザのidトークン取得
   await db.collection('users').doc(uid).get().then(user => {
     const userInfo = user.data()
     if (userInfo === undefined) {
@@ -495,6 +509,7 @@ async function notify(payload: {}, uid: string) {
     return;
   }
 
+  // 対象idトークンをもつユーザに対し、プッシュ通知
   admin.messaging().sendToDevice(token, payload, options)
   .then(pushResponse => {
     console.log("Successfully sent message:", pushResponse);
